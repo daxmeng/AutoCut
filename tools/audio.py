@@ -1,0 +1,213 @@
+import subprocess
+from pydub import AudioSegment
+import os
+from f5_tts.api import F5TTS
+from . import extract
+
+# 路径替换成你自己的 .dylibs 目录
+av_dylib = "/Users/dj/Documents/code/github/1-daxmeng/AutoCut/.venv/lib/python3.11/site-packages/av/.dylibs"
+os.environ["DYLD_LIBRARY_PATH"] = f"{av_dylib}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
+
+# 按需修改为你实际使用的模型名称
+f5_model = F5TTS(
+    exp_name="F5TTS_v1_Base",
+    nfe_step=16,
+    device="mps",
+    use_flash_attn=False
+)
+
+def _f5tts(
+    text,
+    output,
+    ref_audio,
+):
+    output_dir = os.path.dirname(output)
+    output_file = os.path.basename(output)
+    cmd=[
+        "f5-tts_infer-cli",
+        "--model", "F5TTS_v1_Base", # F5TTS_v1_Base / F5TTS_Small
+        "--nfe_step", "16", # 16
+        "--ref_audio", ref_audio,
+        "--ref_text", "是啊,我也超想去云南的,听说云南不仅有古城、雪山、花海、梯田,还有超级多美食,我已经开始期待了。",
+        "--gen_text", text,
+        "--output_dir", output_dir,
+        "--output_file", output_file
+    ]
+    subprocess.run(
+        cmd,
+        check=True
+    )
+
+def _get_duration(path):
+
+    audio=AudioSegment.from_file(
+        path
+    )
+
+    return len(audio)/1000
+
+def _speed_up(
+    input,
+    output,
+    speed
+):
+    cmd=[
+        "ffmpeg",
+        "-y",
+        "-i",
+        input,
+        "-filter:a",
+        f"atempo={speed}",
+        output
+    ]
+
+    subprocess.run(
+        cmd
+    )
+
+def _add_silence(
+    input,
+    output,
+    target
+):
+    audio=AudioSegment.from_file(
+        input
+    )
+    current=len(audio)/1000
+    need=target-current
+
+    if need>0:
+        silence=AudioSegment.silent(
+            duration=need*1000
+        )
+        audio += silence
+
+    audio.export(
+        output,
+        format="wav"
+    )
+
+def _fit_audio(
+    input,
+    target,
+    output
+):
+
+    duration=_get_duration(
+        input
+    )
+
+    if duration > target:
+        speed=duration/target
+        _speed_up(
+            input,
+            output,
+            speed
+        )
+    else:
+        _add_silence(
+            input,
+            output,
+            target
+        )
+
+def _merge_timeline(
+    items,
+    total,
+    output
+):
+    timeline=AudioSegment.silent(
+        duration=total*1000
+    )
+
+    for item in items:
+        audio=AudioSegment.from_file(
+            item["audio"]
+        )
+
+        timeline=timeline.overlay(
+            audio,
+            position=
+            int(item["start"]*1000)
+        )
+    timeline.export(
+        output,
+        format="wav"
+    )
+
+def _remove_audio(
+    video_in,
+    video_out
+):
+    cmd=[
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_in,
+        "-c:v",
+        "copy",
+        "-an",
+        video_out
+    ]
+    subprocess.run(cmd)
+
+def merge_video_audio(
+    video_in,
+    audio,
+    video_out
+):
+    cmd=[
+        "ffmpeg",
+        "-y",
+        "-i", video_in,
+        "-i", audio,
+        "-map", "0:v",
+        "-map", "1:a",
+        "-c:v", "copy",
+        "-c:a", "copy",
+        video_out
+    ]
+    subprocess.run(cmd)
+
+def make_clone_audio(
+    original_video,
+    temp_audio_dir,
+    output_audio,
+    ref_srt,
+    ref_audio,
+):
+    # 1. 声音克隆和时间匹配
+    processed = []
+    subs = extract.load_srt(
+        ref_srt
+    )
+    for index,item in enumerate(subs):
+        raw=f"{temp_audio_dir}ori_{index + 1}.wav"
+        fixed=f"{temp_audio_dir}fit_{index + 1}.wav"
+
+        # F5声音克隆
+        _f5tts(
+            item["text"],
+            raw
+        )
+
+        # 时间匹配
+        _fit_audio(
+            raw,
+            item["end"]-item["start"],
+            fixed
+        )
+
+        item["audio"] = fixed
+        processed.append(item)
+
+    # 2. 获取视频长度
+    total = extract.get_duration_ffprobe(original_video)
+
+    # 3. 生成完整声音
+    _merge_timeline(
+        processed,
+        total,
+        output_audio
+    )
+    # extract.clear_folder(temp_audio_dir)
