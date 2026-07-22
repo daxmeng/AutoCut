@@ -12,6 +12,7 @@ def _extract_audio(video, output):
     cmd = [
         "ffmpeg",
         "-y",
+        "-loglevel", "warning",
         "-i",
         video,
         "-vn",
@@ -69,6 +70,9 @@ def _generate_srt(audio_path: str, out_srt: str, model: AutoModel):
         start_time = max(timestamps[start_ts][0] / 1000, prev_end)
         end_time = max(timestamps[end_ts][1] / 1000, start_time + 0.1)
         prev_end = end_time
+
+        if end_time - start_time < 0.5:
+            continue
 
         # SRT 格式：序号、时间轴、文本、空行
         srt_lines.append(f"{idx}")
@@ -296,6 +300,7 @@ def burn_subtitle(
     cmd=[
         "ffmpeg",
         "-y",
+        "-loglevel", "warning",
         "-i", video_in,
         "-vf", f"ass={ass_file}",
         "-c:v", "libx264",
@@ -331,5 +336,21 @@ def get_duration_ffprobe(video_path):
         "-of", "default=noprint_wrappers=1:nokey=1",
         video_path
     ]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    return float(result.stdout.decode().strip())
+    result = subprocess.run(cmd, check=True)
+    return int(float(result.stdout.decode().strip())* 100) / 100
+
+def speed_video(in_path, out_path, speed=1.3):
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel", "warning",
+        "-i", in_path,
+        "-fps_mode", "vfr",
+        "-vf", f"setpts=PTS/{speed}",
+        "-filter:a", f"atempo={speed}",
+        "-c:v", "libx264", 
+        "-preset", "medium", 
+        "-crf", "18",
+        out_path
+    ]
+    subprocess.run(cmd, check=True)

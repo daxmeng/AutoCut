@@ -1,42 +1,27 @@
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pydub import AudioSegment
 import os
 from f5_tts.api import F5TTS
 from . import extract
 
-# 路径替换成你自己的 .dylibs 目录
-av_dylib = "/Users/dj/Documents/code/github/1-daxmeng/AutoCut/.venv/lib/python3.11/site-packages/av/.dylibs"
-os.environ["DYLD_LIBRARY_PATH"] = f"{av_dylib}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
-
-# 按需修改为你实际使用的模型名称
-f5_model = F5TTS(
-    exp_name="F5TTS_v1_Base",
-    nfe_step=16,
-    device="mps",
-    use_flash_attn=False
-)
-
 def _f5tts(
+    f5_model,
     text,
-    output,
-    ref_audio,
+    audio_file,
+    ref_audio
 ):
-    output_dir = os.path.dirname(output)
-    output_file = os.path.basename(output)
-    cmd=[
-        "f5-tts_infer-cli",
-        "--model", "F5TTS_v1_Base", # F5TTS_v1_Base / F5TTS_Small
-        "--nfe_step", "16", # 16
-        "--ref_audio", ref_audio,
-        "--ref_text", "是啊,我也超想去云南的,听说云南不仅有古城、雪山、花海、梯田,还有超级多美食,我已经开始期待了。",
-        "--gen_text", text,
-        "--output_dir", output_dir,
-        "--output_file", output_file
-    ]
-    subprocess.run(
-        cmd,
-        check=True
+    # 调用全局已加载好的模型
+    wav, sr, spec = f5_model.infer(
+        ref_file = ref_audio,  # 你的参考音频路径
+        ref_text = "是啊,我也超想去云南的,听说云南不仅有古城、雪山、花海、梯田,还有超级多美食,我已经开始期待了。",          # 你的参考文本
+        nfe_step = 12, # 16
+        gen_text = text,
+        file_wave = audio_file,
+        remove_silence = True,
+        show_info = lambda *a, **k: None
     )
+
 
 def _get_duration(path):
 
@@ -54,6 +39,7 @@ def _speed_up(
     cmd=[
         "ffmpeg",
         "-y",
+        "-loglevel", "warning",
         "-i",
         input,
         "-filter:a",
@@ -62,7 +48,8 @@ def _speed_up(
     ]
 
     subprocess.run(
-        cmd
+        cmd,
+        check=True
     )
 
 def _add_silence(
@@ -142,6 +129,7 @@ def _remove_audio(
     cmd=[
         "ffmpeg",
         "-y",
+        "-loglevel", "warning",
         "-i",
         video_in,
         "-c:v",
@@ -149,7 +137,7 @@ def _remove_audio(
         "-an",
         video_out
     ]
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
 def merge_video_audio(
     video_in,
@@ -159,15 +147,19 @@ def merge_video_audio(
     cmd=[
         "ffmpeg",
         "-y",
+        "-loglevel", "warning",
         "-i", video_in,
         "-i", audio,
         "-map", "0:v",
         "-map", "1:a",
         "-c:v", "copy",
-        "-c:a", "copy",
+        "-c:a", "aac",
+        "-ac", "2",          # 双声道立体声
+        "-ar", "44100",      # 标准采样率 44100Hz
+        "-b:a", "128k",      # 标准码率
         video_out
     ]
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
 def make_clone_audio(
     original_video,
@@ -176,6 +168,9 @@ def make_clone_audio(
     ref_srt,
     ref_audio,
 ):
+    f5_model = F5TTS(
+        device = "mps"
+    )
     # 1. 声音克隆和时间匹配
     processed = []
     subs = extract.load_srt(
@@ -187,17 +182,17 @@ def make_clone_audio(
 
         # F5声音克隆
         _f5tts(
+            f5_model,
             item["text"],
-            raw
+            raw,
+            ref_audio
         )
-
         # 时间匹配
         _fit_audio(
             raw,
             item["end"]-item["start"],
             fixed
         )
-
         item["audio"] = fixed
         processed.append(item)
 
