@@ -2,7 +2,6 @@ import subprocess
 from pathlib import Path
 import re
 from typing import List, Tuple
-from funasr import AutoModel
 
 from tools.common import (
     get_media_duration,

@@ -1,5 +1,6 @@
 import subprocess
 import srt
+from funasr import AutoModel
 from pysubs2 import Color, SSAStyle, load
 
 """ 字幕类 """
@@ -326,12 +327,13 @@ def add_text_for_video(in_path, out_path, text="群聊或私信获取台账系�
 
     # ffmpeg drawtext 滤镜配置：黄色+发光效果
     drawtext_filter = (
-        f"drawtext=fontfile=/System/Library/Fonts/PingFang.ttc:"
+        f"drawtext=fontfile=/System/Library/Fonts/STHeiti Medium.ttc:"
         f"text='{text}':"
-        f"fontsize=72:fontcolor=yellow:"
-        f"shadowcolor=orange:shadowx=2:shadowy=2:"  # 模拟发光效果
-        f"enable='gte(t,{text_start})':"  # 只在最后3秒显示
-        f"x=(w-text_w)/2:y=(h-text_h)/2"   # 居中显示
+        f"fontsize=66:fontcolor=yellow:"
+        # 增强发光效果：扩大阴影偏移、加多层模糊模拟光晕
+        f"shadowcolor=red@0.7:shadowx=6:shadowy=6:"
+        f"enable='gte(t,{text_start})':"
+        f"x=(w-text_w)/2:y=26"  # 水平居中，垂直离顶部20像素
     )
 
     cmd = [
