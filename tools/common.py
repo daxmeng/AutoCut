@@ -1,4 +1,6 @@
 import subprocess
+import srt
+from pysubs2 import Color, SSAStyle, load
 
 """ 字幕类 """
 def _split_into_lines(content, abs_start, max_chars):
@@ -164,12 +166,12 @@ def _srt_to_ass(
         srt_file,
         ass_file
 ):
-    subs = pysubs2.load(
+    subs = load(
         srt_file,
         encoding="utf-8"
     )
     # 字幕样式
-    style = pysubs2.SSAStyle(
+    style = SSAStyle(
         fontname="PingFang SC",
         fontsize=20,
         primarycolor=Color(255, 255, 255, 0),   # 纯白色字体

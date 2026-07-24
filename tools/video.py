@@ -2,11 +2,7 @@ import subprocess
 from pathlib import Path
 import re
 from typing import List, Tuple
-
 from funasr import AutoModel
-import pysubs2
-from pysubs2 import Color, SSAStyle
-import srt
 
 from tools.common import (
     get_media_duration,
