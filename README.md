@@ -1,14 +1,6 @@
 # 自动剪辑视频
-
-```Mermaid
-flowchart TD
-    A[视频.mp4] --> B[FFmpeg 提取音频]
-    B --> C[并行处理]
-    C --> D[Whisper VAD 检测<br/>识别静音时间段]
-    C --> E[语音转字幕<br/>生成 SRT 字幕]
-    D & E --> F[FFmpeg 裁剪]
-    F --> G[自动剪辑视频]
-```
+## 必须环境
+- 安装ffmpeg支持libass
 
 ## 自动剪辑核心逻辑
 - 超长静音： 删除 ＞0.8 秒 的静音 / 气口，保留正常短停顿
