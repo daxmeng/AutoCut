@@ -1,7 +1,53 @@
-import re
 import subprocess
-from typing import List, Tuple
 from pathlib import Path
+import re
+from typing import List, Tuple
+
+from funasr import AutoModel
+import pysubs2
+from pysubs2 import Color, SSAStyle
+import srt
+
+from tools.common import (
+    get_media_duration,
+    delete_file,
+    clear_folder,
+    get_lists_by_txt,
+)
+
+def speed_video(in_path, out_path, speed=1.3):
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel", "warning",
+        "-i", in_path,
+        "-fps_mode", "vfr",
+        "-vf", f"setpts=PTS/{speed}",
+        "-filter:a", f"atempo={speed}",
+        "-c:v", "libx264", 
+        "-preset", "medium", 
+        "-crf", "18",
+        out_path
+    ]
+    subprocess.run(cmd, check=True)
+
+def img_audio_2_video(txt_file, img, audio_path, output_path):
+    subs = get_lists_by_txt(txt_file)
+    for index,item in enumerate(subs):
+        cmd = [
+            "ffmpeg",
+            "-loop", "1",
+            "-framerate", "1",
+            "-i", img,
+            "-i", f"{audio_path}audio_{index + 1}.wav",
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-pix_fmt", "yuv420p",
+            "-shortest",
+            "-y",  # 自动覆盖
+            f"{output_path}video_{index + 1}.mp4"
+        ]
+        subprocess.run(cmd, capture_output=True)
 
 def get_silence_segments(video_path: str, silence_duration: float = 1.0, silence_db: str = "-50dB") -> List[Tuple[float, float]]:
     """
@@ -45,8 +91,7 @@ def get_silence_segments(video_path: str, silence_duration: float = 1.0, silence
             segments.append((s, e))
     return segments
 
-
-def cut_silence(video_in: str, video_out: str, min_silence: float = 1.0):
+def cut_silence_for_video(video_in: str, video_out: str, min_silence: float = 1.0):
     """
     删除大于指定时长的静音片段，拼接剩余视频
     :param video_in: 原视频
@@ -119,17 +164,39 @@ def cut_silence(video_in: str, video_out: str, min_silence: float = 1.0):
     subprocess.run(cmd, check=True)
     print(f"完成：{video_out}")
 
+def normalize_video(video_in, video_out):
+    """统一视频参数"""
+    cmd = [
+        "ffmpeg",
+        "-i", video_in,
+        "-vf", "scale=1920:1080,fps=30",
+        "-c:v", "libx264",
+        "-c:a", "aac",       # 统一音频编码为aac
+        "-ar", "44100",      # 统一音频采样率
+        "-ac", "2",          # 统一双声道
+        "-y",  # 覆盖已有文件
+        video_out
+    ]
+    subprocess.run(cmd, check=True)
+    
+def concat_video(video_path_arr, merged_video: str):
+    concat_temp_dir = "temp/output/concat/"
+    video_index_txt = f"{concat_temp_dir}video_index.txt"
+    with open(video_index_txt, "w", encoding="utf-8") as f:
+        for index,path in enumerate(video_path_arr):
+            video_out = f"{concat_temp_dir}{index + 1}.mp4"
+            normalize_video(path, video_out)
+            f.write(f"file '{index + 1}.mp4'\n")
+    cmd = [
+        "ffmpeg",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", video_index_txt,
+        "-c:v", "copy",   # 视频流拷贝
+        "-c:a", "copy",   # 音频流拷贝
+        merged_video
+    ]
 
-if __name__ == "__main__":
-    # ========= 配置区 =========
-    ORI_VIDEO = "temp/input/a.mp4"
-    p = Path(ORI_VIDEO)
-    output_dir = str(p.parent).replace(
-        "input",
-        "output"
-    )
-    OUTPUT_VIDEO = f"{output_dir}/{p.stem}_no_silence.mp4"
-    DELETE_SILENCE_THRESHOLD = 1.0  # 静音大于 1 秒 就删除
-    # ==========================
-
-    cut_silence(ORI_VIDEO, OUTPUT_VIDEO, DELETE_SILENCE_THRESHOLD)
+    # 执行命令
+    subprocess.run(cmd, check=True)
+    clear_folder(concat_temp_dir)

@@ -1,9 +1,16 @@
-import subprocess
-from concurrent.futures import ThreadPoolExecutor
-from pydub import AudioSegment
 import os
+import sys
+import subprocess
+from pathlib import Path
+from pydub import AudioSegment
 from f5_tts.api import F5TTS
-from . import extract
+
+from tools.common import (
+    get_media_duration,
+    clear_folder,
+    load_srt,
+    get_lists_by_txt
+)
 
 def _f5tts(
     f5_model,
@@ -21,15 +28,6 @@ def _f5tts(
         remove_silence = True,
         show_info = lambda *a, **k: None
     )
-
-
-def _get_duration(path):
-
-    audio=AudioSegment.from_file(
-        path
-    )
-
-    return len(audio)/1000
 
 def _speed_up(
     input,
@@ -80,7 +78,7 @@ def _fit_audio(
     output
 ):
 
-    duration=_get_duration(
+    duration=get_media_duration(
         input
     )
 
@@ -98,7 +96,7 @@ def _fit_audio(
             target
         )
 
-def _merge_timeline(
+def _merge_audio_by_timeline(
     items,
     total,
     output
@@ -122,58 +120,19 @@ def _merge_timeline(
         format="wav"
     )
 
-def _remove_audio(
-    video_in,
-    video_out
-):
-    cmd=[
-        "ffmpeg",
-        "-y",
-        "-loglevel", "warning",
-        "-i",
-        video_in,
-        "-c:v",
-        "copy",
-        "-an",
-        video_out
-    ]
-    subprocess.run(cmd, check=True)
-
-def merge_video_audio(
-    video_in,
-    audio,
-    video_out
-):
-    cmd=[
-        "ffmpeg",
-        "-y",
-        "-loglevel", "warning",
-        "-i", video_in,
-        "-i", audio,
-        "-map", "0:v",
-        "-map", "1:a",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-ac", "2",          # 双声道立体声
-        "-ar", "44100",      # 标准采样率 44100Hz
-        "-b:a", "128k",      # 标准码率
-        video_out
-    ]
-    subprocess.run(cmd, check=True)
-
-def make_clone_audio(
+def clone_merge_audio_by_srt(
     original_video,
     temp_audio_dir,
     output_audio,
-    ref_srt,
-    ref_audio,
+    ref_srt = "",
+    ref_audio = "",
 ):
+    processed = []
     f5_model = F5TTS(
         device = "mps"
     )
     # 1. 声音克隆和时间匹配
-    processed = []
-    subs = extract.load_srt(
+    subs = load_srt(
         ref_srt
     )
     for index,item in enumerate(subs):
@@ -195,14 +154,34 @@ def make_clone_audio(
         )
         item["audio"] = fixed
         processed.append(item)
-
     # 2. 获取视频长度
-    total = extract.get_duration_ffprobe(original_video)
+    total = get_media_duration(original_video)
 
     # 3. 生成完整声音
-    _merge_timeline(
+    _merge_audio_by_timeline(
         processed,
         total,
         output_audio
     )
-    # extract.clear_folder(temp_audio_dir)
+    clear_folder(temp_audio_dir)
+
+def clone_audio_by_txt(
+    txt_file,
+    temp_audio_dir,
+    ref_audio = "",
+):
+    f5_model = F5TTS(
+        device = "mps"
+    )
+
+    subs = get_lists_by_txt(txt_file)
+
+    for index,item in enumerate(subs):
+        raw=f"{temp_audio_dir}audio_{index + 1}.wav"
+        # F5声音克隆
+        _f5tts(
+            f5_model,
+            item,
+            raw,
+            ref_audio
+        )
