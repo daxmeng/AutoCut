@@ -1,5 +1,8 @@
 import subprocess
+from pathlib import Path
+import re
 import srt
+from PIL import Image
 from funasr import AutoModel
 from pysubs2 import Color, SSAStyle, load
 
@@ -163,6 +166,14 @@ def _generate_srt(audio_path: str, out_srt: str, model: AutoModel):
     with open(out_srt, "w", encoding="utf-8") as f:
         f.write("\n".join(srt_lines))
 
+def wrap_text(text, limit = 20):
+    chunks = []
+    # 每limit个字符切一段
+    for i in range(0, len(text), limit):
+        chunks.append(text[i:i+limit])
+    # ASS强制换行 \N
+    return r"\N".join(chunks)
+
 def _srt_to_ass(
         srt_file,
         ass_file
@@ -174,7 +185,7 @@ def _srt_to_ass(
     # 字幕样式
     style = SSAStyle(
         fontname="PingFang SC",
-        fontsize=20,
+        fontsize=18,
         primarycolor=Color(255, 255, 255, 0),   # 纯白色字体
         secondarycolor=Color(255, 255, 255, 0),
         outlinecolor=Color(0, 0, 0, 0),         # 黑色轮廓
@@ -185,13 +196,18 @@ def _srt_to_ass(
         # 底部居中
         alignment=2,
         # 字幕距离底部
-        marginv=23
+        marginv=28
     )
 
     subs.styles["Default"] = style
 
     for line in subs.events:
-        line.text = r"{\xbord 3}" + line.text + r"{\xbord 3}"
+        raw_txt = line.text
+        # 自动换行处理
+        # wrapped = wrap_text(raw_txt, 24)
+        wrapped = re.sub(r'\s+', r'\\N', raw_txt)
+        # 增加边框标签
+        line.text = r"{\xbord 3}" + wrapped + r"{\xbord 3}"
 
     subs.save(
         ass_file
@@ -346,6 +362,37 @@ def add_text_for_video(in_path, out_path, text="群聊或私信获取台账系�
         out_path
     ]
     subprocess.run(cmd, check=True)
+
+def add_img_for_video(
+    video_in,
+    video_out,
+    image_path,
+    target_width,
+    last_sec = 3
+):
+    img = Image.open(image_path)
+    w_origin, h_origin = img.size
+    target_height = int(h_origin * target_width / w_origin)
+    dur = get_media_duration(video_in)
+    start_t = dur - last_sec
+    if target_height % 2 != 0:
+            target_height += 1
+
+    filter_complex = (
+        f"[1:v]scale={target_width}:{target_height},format=rgba[img];"
+        f"[0:v][img]overlay=x=(W-w)/2:y=h/2:"
+        f"enable='between(t,{start_t:.2f},{dur:.2f})'"
+    )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_in,
+        "-i", image_path,
+        "-filter_complex", filter_complex,
+        "-c:a", "copy",
+        video_out
+    ]
+    subprocess.run(cmd)
 
 def merge_audio_2_video(
     video_in,

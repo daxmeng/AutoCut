@@ -21,8 +21,9 @@ def _f5tts(
     # 调用全局已加载好的模型
     wav, sr, spec = f5_model.infer(
         ref_file = ref_audio,  # 你的参考音频路径
-        ref_text = "是啊,我也超想去云南的,听说云南不仅有古城、雪山、花海、梯田,还有超级多美食,我已经开始期待了。",          # 你的参考文本
-        nfe_step = 12, # 16
+        # ref_text = "是啊，我也超想去云南的，听说云南不仅有古城、雪山、花海、梯田，还有超级多美食，我已经开始期待了。",          # 你的参考文本
+        ref_text = "在空闲的时候，我最喜欢做的事情就是阅读啦，我会看各种类型的书，希望自己变得更博学！",          # 你的参考文本
+        nfe_step = 12, # 12 16
         gen_text = text,
         file_wave = audio_file,
         remove_silence = True,
@@ -163,7 +164,42 @@ def clone_merge_audio_by_srt(
         total,
         output_audio
     )
-    clear_folder(temp_audio_dir)
+    # clear_folder(temp_audio_dir)
+
+def clone_audio_by_srt_index(
+    temp_audio_dir,
+    ref_srt = "",
+    ref_audio = "",
+    srt_index = 1,
+):
+    processed = []
+    f5_model = F5TTS(
+        device = "mps"
+    )
+    # 1. 声音克隆和时间匹配
+    subs = load_srt(
+        ref_srt
+    )
+    for index,item in enumerate(subs):
+        if index + 1 == srt_index:
+            raw=f"{temp_audio_dir}ori_{index + 1}.wav"
+            fixed=f"{temp_audio_dir}fit_{index + 1}.wav"
+
+            # F5声音克隆
+            _f5tts(
+                f5_model,
+                item["text"],
+                raw,
+                ref_audio
+            )
+            # 时间匹配
+            _fit_audio(
+                raw,
+                item["end"]-item["start"],
+                fixed
+            )
+            break
+
 
 def clone_audio_by_txt(
     txt_file,
@@ -185,3 +221,28 @@ def clone_audio_by_txt(
             raw,
             ref_audio
         )
+
+def merge_audio_by_srt(
+    original_video,
+    temp_audio_dir,
+    output_audio,
+    ref_srt = "",
+):
+    processed = []
+    # 1. 声音克隆和时间匹配
+    subs = load_srt(
+        ref_srt
+    )
+    for index,item in enumerate(subs):
+        fixed=f"{temp_audio_dir}fit_{index + 1}.wav"
+        item["audio"] = fixed
+        processed.append(item)
+    # 2. 获取视频长度
+    total = get_media_duration(original_video)
+
+    # 3. 生成完整声音
+    _merge_audio_by_timeline(
+        processed,
+        total,
+        output_audio
+    )

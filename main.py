@@ -1,16 +1,20 @@
 import sys
 from pathlib import Path
 from tools.video import (
-    speed_video
+    speed_video,
+    cut_silence_for_video
 )
 from tools.audio import (
-    clone_merge_audio_by_srt
+    clone_merge_audio_by_srt,
+    merge_audio_by_srt,
+    clone_audio_by_srt_index,
 )
 from tools.common import (
     add_text_for_video,
     merge_audio_2_video,
     extract_audio_srt,
     burn_subtitle_2_video,
+    add_img_for_video,
 )
 
 # 公共变量
@@ -41,20 +45,25 @@ if flow_num == 1:
     extract_audio_srt(ORI_VIDEO, ORI_AUDIO, OUTPUT_SRT)
 elif flow_num == 2:
     # 2. 声音克隆和时间匹配
-    clone_merge_audio_by_srt(
-        temp_audio_dir=TMP_AUDIO_PREFIX,
-        original_video=ORI_VIDEO,
-        output_audio=AUDIO_CLONE,
-        ref_srt=OUTPUT_SRT,
-        ref_audio=REF_AUDIO
-    )
-
+    # clone_merge_audio_by_srt(
+    #     temp_audio_dir=TMP_AUDIO_PREFIX,
+    #     original_video=ORI_VIDEO,
+    #     output_audio=AUDIO_CLONE,
+    #     ref_srt=OUTPUT_SRT,
+    #     ref_audio=REF_AUDIO
+    # )
+    # merge_audio_by_srt(
+    #     temp_audio_dir=TMP_AUDIO_PREFIX,
+    #     original_video=ORI_VIDEO,
+    #     output_audio=AUDIO_CLONE,
+    #     ref_srt=OUTPUT_SRT,
+    # )
     # 3. 把克隆的声音和原视频合并
-    merge_audio_2_video(
-        ORI_VIDEO,
-        AUDIO_CLONE,
-        VIDEO_AUDIO
-    )
+    # merge_audio_2_video(
+    #     ORI_VIDEO,
+    #     AUDIO_CLONE,
+    #     VIDEO_AUDIO
+    # )
 
     # 4. 字幕转换 & 烧录字幕
     burn_subtitle_2_video(
@@ -65,5 +74,23 @@ elif flow_num == 2:
 elif flow_num == 3:
     # 5. 加速
     speed_video(VIDEO_FINAL, VIDEO_SPEED)
+elif flow_num == 4:
+    ORI_WAV = "temp/input/1.wav"
+    cut_silence_for_video(ORI_WAV, ORI_WAV.replace(".wav", "-short.wav"))
+elif flow_num == 5:
+    video_in = "temp/output/20260729.mp4"
+    add_img_for_video(
+        video_in=video_in,
+        video_out=video_in.replace(".mp4", "_cta.mp4"),
+        image_path="temp/input/CTA.png",
+        target_width=900,
+        last_sec = 6.5
+    )
 else:
-    add_text_for_video(VIDEO_SPEED, VIDEO_CTA)
+    # add_text_for_video(VIDEO_SPEED, VIDEO_CTA)
+    clone_audio_by_srt_index(
+        temp_audio_dir=TMP_AUDIO_PREFIX,
+        ref_srt=OUTPUT_SRT,
+        ref_audio=REF_AUDIO,
+        srt_index = 2,
+    )
