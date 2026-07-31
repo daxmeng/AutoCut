@@ -246,3 +246,40 @@ def merge_audio_by_srt(
         total,
         output_audio
     )
+
+# FFmpeg参数：强制 44100Hz 16bit 单声道 pcm_s16le
+def convert_single_mp3(input, output, flow=2):
+    try:
+        output_temp = output.replace(".", "_temp.")
+        cmd1 = [
+            "ffmpeg",
+            "-y",                # 覆盖输出文件，不弹窗询问
+            "-loglevel", "warning",
+            "-i", input,
+            "-acodec", "pcm_s16le",
+            "-ar", "44100",      # 采样率
+            "-ac", "1",          # 1=单声道
+            output_temp
+        ]
+        cmd2 = [
+            "ffmpeg",
+            "-y",                # 覆盖输出，无需确认
+            "-loglevel", "warning",
+            "-fflags", "+bitexact",    # 关键：禁止写入encoder标记
+            "-i", input,
+            "-acodec", "adpcm_ima_wav",  # ADPCM编码
+            "-ar", "16000",              # 采样率16000Hz
+            "-ac", "1",                  # 单声道
+            "-map_metadata", "-1",   # 删除所有元数据
+            output_temp
+        ]
+        if flow == 2:
+            cmd = cmd2
+        else:
+            cmd = cmd1
+        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(f"sox {output_temp} {output}", check=True, capture_output=True)
+        print(f"✅ 完成：{os.path.basename(input)}")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 失败 {input}: {e.stderr.decode()}")
+

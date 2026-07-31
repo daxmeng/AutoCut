@@ -8,6 +8,7 @@ from tools.audio import (
     clone_merge_audio_by_srt,
     merge_audio_by_srt,
     clone_audio_by_srt_index,
+    convert_single_mp3,
 )
 from tools.common import (
     add_text_for_video,
@@ -86,6 +87,8 @@ elif flow_num == 5:
         target_width=900,
         last_sec = 6.5
     )
+elif flow_num == 6:
+    convert_single_mp3("temp/input/1.mp3", "temp/input/Rec02671.wav", 1)
 else:
     # add_text_for_video(VIDEO_SPEED, VIDEO_CTA)
     clone_audio_by_srt_index(
